@@ -1,0 +1,4 @@
+.build
+BridgeArtifacts/lib/libovergraph_swift_bridge.a
+Vendor/overgraph
+rust-bridge/target
