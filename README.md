@@ -65,6 +65,11 @@ swift run --disable-sandbox overgraph-cli --db ./example-db --run-script Example
 
 `--props` input in the CLI accepts JSON5 syntax, so comments, trailing commas, single-quoted strings, and unquoted object keys are allowed at the REPL layer. The underlying Rust bridge still receives normalized standard JSON.
 
+Temporal CLI input is also human-friendly. Wherever the CLI accepts a date, you
+can use raw epoch milliseconds, epoch seconds, `now`, `today`, `yesterday`,
+`tomorrow`, `YYYY-MM-DD`, or ISO-style timestamps such as
+`2024-06-01T12:30:00Z`.
+
 ## Examples
 
 Example scripts live in `Examples/`:

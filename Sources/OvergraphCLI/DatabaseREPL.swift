@@ -9,12 +9,14 @@ struct DatabaseREPL {
 
   let database: OvergraphDatabase
   private let encoder: JSONEncoder
+  private let dateParser: HumanDateParser
 
   init(database: OvergraphDatabase) {
     self.database = database
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     self.encoder = encoder
+    self.dateParser = HumanDateParser()
   }
 
   func readLine(prompt: String) -> String? {
@@ -67,7 +69,7 @@ struct DatabaseREPL {
 
   private func runNeighbors(tokens: [String]) throws {
     guard let first = tokens.first else {
-      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch ms|--asof ms]")
+      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>]")
     }
     let nodeID = try parseUInt64(first, name: "node-id")
     var direction: Direction = .outgoing
@@ -105,10 +107,10 @@ struct DatabaseREPL {
           }
       case "--at-epoch", "--asof":
         index += 1
-        guard index < tokens.count, let parsed = Int64(tokens[index]) else {
-          throw CLIError.usage("Expected epoch milliseconds after \(tokens[index - 1])")
+        guard index < tokens.count else {
+          throw CLIError.usage("Expected date after \(tokens[index - 1])")
         }
-        atEpoch = parsed
+        atEpoch = try dateParser.parseEpochMilliseconds(tokens[index])
       default:
         throw CLIError.usage("Unknown neighbors option '\(tokens[index])'")
       }
@@ -168,7 +170,7 @@ struct DatabaseREPL {
 
   private func runUpsertEdge(tokens: [String]) throws {
     guard tokens.count >= 3 else {
-      throw CLIError.usage("upsert-edge <from> <to> <type-id> [--props '{role: \"lead\"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]")
+      throw CLIError.usage("upsert-edge <from> <to> <type-id> [--props '{role: \"lead\"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]")
     }
     let from = try parseUInt64(tokens[0], name: "from")
     let to = try parseUInt64(tokens[1], name: "to")
@@ -195,16 +197,16 @@ struct DatabaseREPL {
         weight = parsed
       case "--valid-from":
         index += 1
-        guard index < tokens.count, let parsed = Int64(tokens[index]) else {
-          throw CLIError.usage("Expected integer after --valid-from")
+        guard index < tokens.count else {
+          throw CLIError.usage("Expected date after --valid-from")
         }
-        validFrom = parsed
+        validFrom = try dateParser.parseEpochMilliseconds(tokens[index])
       case "--valid-to":
         index += 1
-        guard index < tokens.count, let parsed = Int64(tokens[index]) else {
-          throw CLIError.usage("Expected integer after --valid-to")
+        guard index < tokens.count else {
+          throw CLIError.usage("Expected date after --valid-to")
         }
-        validTo = parsed
+        validTo = try dateParser.parseEpochMilliseconds(tokens[index])
       default:
         throw CLIError.usage("Unknown upsert-edge option '\(tokens[index])'")
       }
@@ -231,11 +233,19 @@ struct DatabaseREPL {
         get-edge <id>
         get-node-by-key <type-id> <key>
         nodes-by-type <type-id>
-        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch ms|--asof ms]
+        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>]
         upsert-node <type-id> <key> [--props '{name: "Alice"}'] [--weight 1.0]
-        upsert-edge <from> <to> <type-id> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]
+        upsert-edge <from> <to> <type-id> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]
         delete-node <id>
         delete-edge <id>
+
+      Date examples:
+        now
+        today
+        tomorrow
+        2024-06-01
+        2024-06-01T12:30:00Z
+        2024-06-01 12:30
       """
     )
   }
