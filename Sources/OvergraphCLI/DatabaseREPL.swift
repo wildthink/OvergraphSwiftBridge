@@ -1,60 +1,7 @@
-import ArgumentParser
 import Foundation
 import OvergraphSwiftBridge
 
-@main
-struct OvergraphCLI: ParsableCommand {
-  static let configuration = CommandConfiguration(
-    commandName: "overgraph-cli",
-    abstract: "Interactive REPL for an Overgraph database."
-  )
-
-  @Option(name: .shortAndLong, help: "Path to the database directory.")
-  var db: String
-
-  @Flag(help: "Do not create the database directory automatically.")
-  var noCreateIfMissing = false
-
-  @Option(help: "Run one command and exit instead of starting the interactive REPL.")
-  var execute: String?
-
-  @Option(help: "Run commands from a script file and exit.")
-  var runScript: String?
-
-  mutating func run() throws {
-    let database = try OvergraphDatabase(
-      path: db,
-      options: DatabaseOptions(createIfMissing: !noCreateIfMissing)
-    )
-    defer { try? database.close() }
-
-    let repl = DatabaseREPL(database: database)
-    if let execute {
-      _ = try repl.execute(line: execute)
-      return
-    }
-    if let runScript {
-      try repl.runScript(atPath: runScript)
-      return
-    }
-
-    print("Connected to \(db)")
-    print("Type 'help' for commands. Type 'exit' or 'quit' to leave.")
-    while let line = repl.readLine(prompt: "overgraph> ") {
-      let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmed.isEmpty { continue }
-      do {
-        if try repl.execute(line: trimmed) == .exit {
-          break
-        }
-      } catch {
-        fputs("error: \(error)\n", stderr)
-      }
-    }
-  }
-}
-
-private struct DatabaseREPL {
+struct DatabaseREPL {
   enum Result {
     case `continue`
     case exit
@@ -118,26 +65,15 @@ private struct DatabaseREPL {
     return .continue
   }
 
-  func runScript(atPath path: String) throws {
-    let source = try String(contentsOfFile: path, encoding: .utf8)
-    let stripped = stripComments(from: source)
-    for rawLine in stripped.split(whereSeparator: \.isNewline) {
-      let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-      if line.isEmpty { continue }
-      if try execute(line: line) == .exit {
-        return
-      }
-    }
-  }
-
   private func runNeighbors(tokens: [String]) throws {
     guard let first = tokens.first else {
-      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11]")
+      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch ms|--asof ms]")
     }
     let nodeID = try parseUInt64(first, name: "node-id")
     var direction: Direction = .outgoing
     var limit: Int?
     var types: [UInt32]?
+    var atEpoch: Int64?
 
     var index = 1
     while index < tokens.count {
@@ -167,6 +103,12 @@ private struct DatabaseREPL {
             }
             return value
           }
+      case "--at-epoch", "--asof":
+        index += 1
+        guard index < tokens.count, let parsed = Int64(tokens[index]) else {
+          throw CLIError.usage("Expected epoch milliseconds after \(tokens[index - 1])")
+        }
+        atEpoch = parsed
       default:
         throw CLIError.usage("Unknown neighbors option '\(tokens[index])'")
       }
@@ -176,14 +118,19 @@ private struct DatabaseREPL {
     try printJSON(
       database.neighbors(
         of: nodeID,
-        options: NeighborOptions(direction: direction, typeFilter: types, limit: limit)
+        options: NeighborOptions(
+          direction: direction,
+          typeFilter: types,
+          limit: limit,
+          atEpoch: atEpoch
+        )
       )
     )
   }
 
   private func runUpsertNode(tokens: [String]) throws {
     guard tokens.count >= 2 else {
-      throw CLIError.usage("upsert-node <type-id> <key> [--props '{\"name\":\"Alice\"}'] [--weight 1.0]")
+      throw CLIError.usage("upsert-node <type-id> <key> [--props '{name: \"Alice\"}'] [--weight 1.0]")
     }
     let typeID = try parseUInt32(tokens[0], name: "type-id")
     let key = tokens[1]
@@ -196,7 +143,7 @@ private struct DatabaseREPL {
       case "--props":
         index += 1
         guard index < tokens.count else {
-          throw CLIError.usage("Expected JSON object after --props")
+          throw CLIError.usage("Expected JSON5 object after --props")
         }
         props = try parseJSONObject(tokens[index])
       case "--weight":
@@ -221,7 +168,7 @@ private struct DatabaseREPL {
 
   private func runUpsertEdge(tokens: [String]) throws {
     guard tokens.count >= 3 else {
-      throw CLIError.usage("upsert-edge <from> <to> <type-id> [--props '{\"role\":\"lead\"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]")
+      throw CLIError.usage("upsert-edge <from> <to> <type-id> [--props '{role: \"lead\"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]")
     }
     let from = try parseUInt64(tokens[0], name: "from")
     let to = try parseUInt64(tokens[1], name: "to")
@@ -237,7 +184,7 @@ private struct DatabaseREPL {
       case "--props":
         index += 1
         guard index < tokens.count else {
-          throw CLIError.usage("Expected JSON object after --props")
+          throw CLIError.usage("Expected JSON5 object after --props")
         }
         props = try parseJSONObject(tokens[index])
       case "--weight":
@@ -284,9 +231,9 @@ private struct DatabaseREPL {
         get-edge <id>
         get-node-by-key <type-id> <key>
         nodes-by-type <type-id>
-        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11]
-        upsert-node <type-id> <key> [--props '{"k":"v"}'] [--weight 1.0]
-        upsert-edge <from> <to> <type-id> [--props '{"k":"v"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]
+        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch ms|--asof ms]
+        upsert-node <type-id> <key> [--props '{name: "Alice"}'] [--weight 1.0]
+        upsert-edge <from> <to> <type-id> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from ms] [--valid-to ms]
         delete-node <id>
         delete-edge <id>
       """
@@ -300,9 +247,9 @@ private struct DatabaseREPL {
 
   private func parseJSONObject(_ text: String) throws -> [String: JSONValue] {
     let data = Data(text.utf8)
-    let object = try JSONSerialization.jsonObject(with: data)
+    let object = try JSONSerialization.jsonObject(with: data, options: [.json5Allowed])
     guard let dictionary = object as? [String: Any] else {
-      throw CLIError.usage("Expected a JSON object")
+      throw CLIError.usage("Expected a JSON5 object")
     }
     return try dictionary.mapValues(JSONValue.from(any:))
   }
@@ -363,74 +310,6 @@ private struct DatabaseREPL {
     return tokens
   }
 
-  private func stripComments(from source: String) -> String {
-    enum State {
-      case normal
-      case lineComment
-      case blockComment
-      case string(Character)
-    }
-
-    var result = ""
-    var state: State = .normal
-    var index = source.startIndex
-    var escaping = false
-
-    while index < source.endIndex {
-      let character = source[index]
-      let nextIndex = source.index(after: index)
-      let nextCharacter = nextIndex < source.endIndex ? source[nextIndex] : nil
-
-      switch state {
-      case .normal:
-        if character == "/", nextCharacter == "/" {
-          state = .lineComment
-          index = source.index(after: nextIndex)
-          continue
-        }
-        if character == "/", nextCharacter == "*" {
-          state = .blockComment
-          index = source.index(after: nextIndex)
-          continue
-        }
-        if character == "\"" || character == "'" {
-          state = .string(character)
-        }
-        result.append(character)
-
-      case .lineComment:
-        if character.isNewline {
-          state = .normal
-          result.append(character)
-        }
-
-      case .blockComment:
-        if character == "*", nextCharacter == "/" {
-          state = .normal
-          index = source.index(after: nextIndex)
-          continue
-        }
-        if character.isNewline {
-          result.append(character)
-        }
-
-      case let .string(quote):
-        result.append(character)
-        if escaping {
-          escaping = false
-        } else if character == "\\" {
-          escaping = true
-        } else if character == quote {
-          state = .normal
-        }
-      }
-
-      index = nextIndex
-    }
-
-    return result
-  }
-
   private func flushTokenIfNeeded(_ current: inout String, into tokens: inout [String]) {
     if !current.isEmpty {
       tokens.append(current)
@@ -439,7 +318,7 @@ private struct DatabaseREPL {
   }
 }
 
-private enum CLIError: LocalizedError {
+enum CLIError: LocalizedError {
   case usage(String)
 
   var errorDescription: String? {

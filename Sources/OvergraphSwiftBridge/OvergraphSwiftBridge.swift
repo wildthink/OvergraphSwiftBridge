@@ -1,11 +1,27 @@
 import COvergraphBridge
 import Foundation
 
+/// Swift wrapper around the local Overgraph Rust engine.
+///
+/// This package intentionally uses a JSON-oriented bridge layer between Swift and
+/// Rust. Public option and record types are `Codable` so callers can work with a
+/// small stable Swift surface while the underlying FFI remains simple.
+///
+/// Concurrency note:
+/// `OvergraphDatabase` is marked `@unchecked Sendable`. The current Alpha/Beta
+/// release keeps that contract narrow: concurrent use is allowed only to the
+/// extent that the underlying Overgraph engine and this wrapper remain safe for
+/// shared access. Callers should prefer external synchronization when in doubt.
 public final class OvergraphDatabase: @unchecked Sendable {
   private var handle: UnsafeMutableRawPointer?
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
+  /// Opens a database at `path`.
+  ///
+  /// - Parameters:
+  ///   - path: Filesystem path to the database directory.
+  ///   - options: Database open options serialized to JSON for the Rust bridge.
   public init(path: String, options: DatabaseOptions = .init()) throws {
     var errorPointer: UnsafeMutablePointer<CChar>?
     let rawHandle = path.withCString { pathCString in
@@ -26,6 +42,10 @@ public final class OvergraphDatabase: @unchecked Sendable {
     }
   }
 
+  /// Closes the database handle.
+  ///
+  /// Calling `close()` more than once is allowed. Later calls do nothing after
+  /// the handle has already been closed.
   public func close(force: Bool = false) throws {
     guard let handle else { return }
     var errorPointer: UnsafeMutablePointer<CChar>?
@@ -38,6 +58,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     }
   }
 
+  /// Inserts or updates a node and returns its numeric node ID.
   public func upsertNode(
     typeID: UInt32,
     key: String,
@@ -54,6 +75,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: UInt64Response.self).value
   }
 
+  /// Inserts or updates an edge and returns its numeric edge ID.
   public func upsertEdge(
     from: UInt64,
     to: UInt64,
@@ -72,6 +94,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: UInt64Response.self).value
   }
 
+  /// Fetches a node by ID.
   public func getNode(id: UInt64) throws -> NodeRecord? {
     let request = BridgeRequest(
       method: "getNode",
@@ -80,6 +103,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: NodeRecordEnvelope.self).node
   }
 
+  /// Fetches an edge by ID.
   public func getEdge(id: UInt64) throws -> EdgeRecord? {
     let request = BridgeRequest(
       method: "getEdge",
@@ -88,6 +112,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: EdgeRecordEnvelope.self).edge
   }
 
+  /// Fetches a node by its `(typeID, key)` identity.
   public func getNodeByKey(typeID: UInt32, key: String) throws -> NodeRecord? {
     let request = BridgeRequest(
       method: "getNodeByKey",
@@ -99,6 +124,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: NodeRecordEnvelope.self).node
   }
 
+  /// Returns all nodes for a given type ID.
   public func getNodesByType(typeID: UInt32) throws -> [NodeRecord] {
     let request = BridgeRequest(
       method: "getNodesByType",
@@ -107,6 +133,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: NodesResponse.self).items
   }
 
+  /// Returns adjacent nodes for `nodeID` using the provided query options.
   public func neighbors(
     of nodeID: UInt64,
     options: NeighborOptions = .init()
@@ -121,10 +148,12 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: NeighborsResponse.self).items
   }
 
+  /// Returns lightweight database runtime statistics.
   public func stats() throws -> DatabaseStats {
     try call(BridgeRequest(method: "stats", params: .object([:])), as: DatabaseStats.self)
   }
 
+  /// Deletes a node by ID.
   public func deleteNode(id: UInt64) throws {
     let request = BridgeRequest(
       method: "deleteNode",
@@ -133,6 +162,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
     _ = try call(request, as: EmptyResponse.self)
   }
 
+  /// Deletes an edge by ID.
   public func deleteEdge(id: UInt64) throws {
     let request = BridgeRequest(
       method: "deleteEdge",
@@ -160,6 +190,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
   }
 }
 
+/// Options used when opening an `OvergraphDatabase`.
 public struct DatabaseOptions: Codable, Sendable {
   public var createIfMissing: Bool
   public var memtableFlushThreshold: UInt
@@ -168,6 +199,7 @@ public struct DatabaseOptions: Codable, Sendable {
   public var memtableHardCapBytes: UInt
   public var maxImmutableMemtables: UInt
 
+  /// Creates a new set of database open options.
   public init(
     createIfMissing: Bool = true,
     memtableFlushThreshold: UInt = 128 * 1024 * 1024,
@@ -193,12 +225,14 @@ public struct DatabaseOptions: Codable, Sendable {
   }
 }
 
+/// Options for inserting or updating a node.
 public struct UpsertNodeOptions: Codable, Sendable {
   public var props: [String: JSONValue]
   public var weight: Float
   public var denseVector: [Float]?
   public var sparseVector: [SparseVectorEntry]?
 
+  /// Creates a new set of node upsert options.
   public init(
     props: [String: JSONValue] = [:],
     weight: Float = 1.0,
@@ -212,12 +246,14 @@ public struct UpsertNodeOptions: Codable, Sendable {
   }
 }
 
+/// Options for inserting or updating an edge.
 public struct UpsertEdgeOptions: Codable, Sendable {
   public var props: [String: JSONValue]
   public var weight: Float
   public var validFrom: Int64?
   public var validTo: Int64?
 
+  /// Creates a new set of edge upsert options.
   public init(
     props: [String: JSONValue] = [:],
     weight: Float = 1.0,
@@ -231,6 +267,7 @@ public struct UpsertEdgeOptions: Codable, Sendable {
   }
 }
 
+/// Options for neighbor traversal from a single node.
 public struct NeighborOptions: Codable, Sendable {
   public var direction: Direction
   public var typeFilter: [UInt32]?
@@ -238,6 +275,7 @@ public struct NeighborOptions: Codable, Sendable {
   public var atEpoch: Int64?
   public var decayLambda: Float?
 
+  /// Creates a new set of neighbor query options.
   public init(
     direction: Direction = .outgoing,
     typeFilter: [UInt32]? = nil,
@@ -253,22 +291,26 @@ public struct NeighborOptions: Codable, Sendable {
   }
 }
 
+/// Traversal direction for graph queries that walk edges.
 public enum Direction: String, Codable, Sendable {
   case outgoing
   case incoming
   case both
 }
 
+/// Sparse vector entry used by node upsert options and records.
 public struct SparseVectorEntry: Codable, Sendable {
   public var dimension: UInt32
   public var value: Float
 
+  /// Creates a sparse vector entry.
   public init(dimension: UInt32, value: Float) {
     self.dimension = dimension
     self.value = value
   }
 }
 
+/// Node record returned by the public Swift API.
 public struct NodeRecord: Codable, Sendable {
   public var id: UInt64
   public var typeID: UInt32
@@ -295,6 +337,7 @@ public struct NodeRecord: Codable, Sendable {
   }
 }
 
+/// Edge record returned by the public Swift API.
 public struct EdgeRecord: Codable, Sendable {
   public var id: UInt64
   public var from: UInt64
@@ -323,6 +366,7 @@ public struct EdgeRecord: Codable, Sendable {
   }
 }
 
+/// Neighbor traversal result entry.
 public struct NeighborEntry: Codable, Sendable {
   public var nodeID: UInt64
   public var edgeID: UInt64
@@ -341,6 +385,7 @@ public struct NeighborEntry: Codable, Sendable {
   }
 }
 
+/// Runtime statistics reported by the database engine.
 public struct DatabaseStats: Codable, Sendable {
   public var pendingWalBytes: Int
   public var segmentCount: Int
@@ -371,6 +416,10 @@ public struct DatabaseStats: Codable, Sendable {
   }
 }
 
+/// JSON value used by the public Swift bridge surface.
+///
+/// The library surface uses plain JSON values, while the CLI accepts JSON5 and
+/// normalizes it before sending it to the bridge.
 public enum JSONValue: Codable, Sendable, Equatable {
   case null
   case bool(Bool)
@@ -419,6 +468,7 @@ public enum JSONValue: Codable, Sendable, Equatable {
     return try JSONDecoder().decode(JSONValue.self, from: data)
   }
 
+  /// Converts a Foundation value into a `JSONValue`.
   public static func from(any value: Any) throws -> JSONValue {
     switch value {
     case is NSNull:
@@ -443,6 +493,7 @@ public enum JSONValue: Codable, Sendable, Equatable {
     }
   }
 
+  /// Returns a pretty-printed JSON representation of the value.
   public func prettyPrinted() throws -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -451,6 +502,7 @@ public enum JSONValue: Codable, Sendable, Equatable {
   }
 }
 
+/// Errors surfaced by the Swift bridge layer.
 public enum BridgeError: Error, LocalizedError, Sendable {
   case message(String)
   case closed

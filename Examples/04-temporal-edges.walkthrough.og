@@ -1,0 +1,37 @@
+/*
+  Temporal edge walkthrough.
+
+  Run against a fresh database:
+    swift run --disable-sandbox overgraph-cli --db /tmp/og-temporal --run-script Examples/04-temporal-edges.walkthrough.og
+
+  This script assumes an empty database so node IDs are:
+    1 = alice
+    2 = atlas
+    3 = mercury
+
+  Epochs used below:
+    1704067200000 = 2024-01-01T00:00:00Z
+    1711929600000 = 2024-04-01T00:00:00Z
+    1714521600000 = 2024-05-01T00:00:00Z
+    1717200000000 = 2024-06-01T00:00:00Z
+*/
+
+upsert-node 1 person:alice --props '{name: "Alice"}'
+upsert-node 2 project:atlas --props '{name: "Atlas"}'
+upsert-node 2 project:mercury --props '{name: "Mercury"}'
+
+/* Alice worked on Atlas from Jan through May, then moved to Mercury in June. */
+upsert-edge 1 2 11 --props '{role: "lead"}' --valid-from 1704067200000 --valid-to 1714521600000
+upsert-edge 1 3 11 --props '{role: "lead"}' --valid-from 1717200000000
+
+/* Current view sees only currently-valid edges. */
+neighbors 1 --direction outgoing
+
+/* As-of query in March 2024 sees Atlas. */
+neighbors 1 --direction outgoing --asof 1711929600000
+
+/* As-of query in June 2024 sees Mercury. */
+neighbors 1 --direction outgoing --at-epoch 1717200000000
+
+stats
+quit

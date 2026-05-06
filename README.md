@@ -1,6 +1,10 @@
 # Overgraph Swift Bridge
 
+Current status: Beta-quality package surface, JSON-oriented bridge, evolving docs.
+
 Swift Package wrapper around a small Rust FFI shim for `overgraph`, plus a Swift CLI REPL.
+The public Swift API intentionally sticks with a small JSON-based interface for
+this Beta phase.
 
 ## Layout
 
@@ -59,6 +63,8 @@ Run a script file:
 swift run --disable-sandbox overgraph-cli --db ./example-db --run-script Examples/01-social-graph.walkthrough.og
 ```
 
+`--props` input in the CLI accepts JSON5 syntax, so comments, trailing commas, single-quoted strings, and unquoted object keys are allowed at the REPL layer. The underlying Rust bridge still receives normalized standard JSON.
+
 ## Examples
 
 Example scripts live in `Examples/`:
@@ -66,6 +72,7 @@ Example scripts live in `Examples/`:
 - `01-social-graph.walkthrough.og`: create a small people graph and run neighbor queries
 - `02-knowledge-graph.walkthrough.og`: create mixed node types and query by key, type, and edge type
 - `03-lifecycle-and-cleanup.walkthrough.og`: create tasks, inspect dependencies, then delete edges and nodes
+- `04-temporal-edges.walkthrough.og`: create valid-time edges and query them with `--asof` / `--at-epoch`
 
 Current note: scripts that create edges assume a fresh empty database so the allocated node IDs are predictable.
 
@@ -92,5 +99,11 @@ The REPL currently supports:
 - `upsert-edge`
 - `delete-node`
 - `delete-edge`
+
+Temporal note:
+
+- Edge writes support `validFrom` and `validTo`
+- `neighbors` supports point-in-time reads with `atEpoch`
+- The CLI exposes this as `--at-epoch <epoch-ms>` and `--asof <epoch-ms>`
 
 The Rust bridge uses JSON payloads over a small C ABI so the Swift layer can stay ergonomic while avoiding a large hand-written struct-by-struct FFI surface.

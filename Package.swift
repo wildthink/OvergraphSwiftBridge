@@ -46,5 +46,6 @@ let package = Package(
       name: "OvergraphSwiftBridgeTests",
       dependencies: ["OvergraphSwiftBridge"]
     ),
-  ]
+  ],
+  swiftLanguageModes: [.v6]
 )
