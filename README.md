@@ -78,6 +78,7 @@ Example scripts live in `Examples/`:
 - `02-knowledge-graph.walkthrough.og`: create mixed node types and query by key, type, and edge type
 - `03-lifecycle-and-cleanup.walkthrough.og`: create tasks, inspect dependencies, then delete edges and nodes
 - `04-temporal-edges.walkthrough.og`: create valid-time edges and query them with `--asof` / `--at-epoch`
+- `05-decay-scoring.walkthrough.og`: compare raw neighbor ranking with time-decayed ranking
 
 Current note: scripts that create edges assume a fresh empty database so the allocated node IDs are predictable.
 
@@ -110,5 +111,29 @@ Temporal note:
 - Edge writes support `validFrom` and `validTo`
 - `neighbors` supports point-in-time reads with `atEpoch`
 - The CLI exposes this as `--at-epoch <epoch-ms>` and `--asof <epoch-ms>`
+
+## Decay scoring
+
+For neighbor-style queries, Overgraph can apply exponential time decay to edge
+weights.
+
+- Formula: `score = weight * exp(-lambda * age_hours)`
+- `age_hours = (reference_time - valid_from) / 3_600_000`
+- `reference_time` is `atEpoch` if provided, otherwise the current time
+
+Practical effect:
+
+- `lambda = 0` means no decay
+- larger `lambda` makes older edges lose score faster
+- with equal base weights, newer edges rank higher when decay is enabled
+
+In the CLI, use:
+
+```sh
+neighbors 1 --asof 2024-06-15 --decay-lambda 0.1
+```
+
+The decay example script in `Examples/05-decay-scoring.walkthrough.og` shows the
+difference between raw ranking and time-decayed ranking.
 
 The Rust bridge uses JSON payloads over a small C ABI so the Swift layer can stay ergonomic while avoiding a large hand-written struct-by-struct FFI surface.

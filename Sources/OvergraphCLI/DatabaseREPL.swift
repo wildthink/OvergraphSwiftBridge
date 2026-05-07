@@ -69,13 +69,14 @@ struct DatabaseREPL {
 
   private func runNeighbors(tokens: [String]) throws {
     guard let first = tokens.first else {
-      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>]")
+      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]")
     }
     let nodeID = try parseUInt64(first, name: "node-id")
     var direction: Direction = .outgoing
     var limit: Int?
     var types: [UInt32]?
     var atEpoch: Int64?
+    var decayLambda: Float?
 
     var index = 1
     while index < tokens.count {
@@ -111,6 +112,12 @@ struct DatabaseREPL {
           throw CLIError.usage("Expected date after \(tokens[index - 1])")
         }
         atEpoch = try dateParser.parseEpochMilliseconds(tokens[index])
+      case "--decay-lambda":
+        index += 1
+        guard index < tokens.count, let parsed = Float(tokens[index]) else {
+          throw CLIError.usage("Expected number after --decay-lambda")
+        }
+        decayLambda = parsed
       default:
         throw CLIError.usage("Unknown neighbors option '\(tokens[index])'")
       }
@@ -124,7 +131,8 @@ struct DatabaseREPL {
           direction: direction,
           typeFilter: types,
           limit: limit,
-          atEpoch: atEpoch
+          atEpoch: atEpoch,
+          decayLambda: decayLambda
         )
       )
     )
@@ -233,7 +241,7 @@ struct DatabaseREPL {
         get-edge <id>
         get-node-by-key <type-id> <key>
         nodes-by-type <type-id>
-        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>]
+        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]
         upsert-node <type-id> <key> [--props '{name: "Alice"}'] [--weight 1.0]
         upsert-edge <from> <to> <type-id> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]
         delete-node <id>
@@ -246,6 +254,9 @@ struct DatabaseREPL {
         2024-06-01
         2024-06-01T12:30:00Z
         2024-06-01 12:30
+
+      Decay note:
+        neighbors supports `--decay-lambda <lambda>` for time-decayed scoring
       """
     )
   }
