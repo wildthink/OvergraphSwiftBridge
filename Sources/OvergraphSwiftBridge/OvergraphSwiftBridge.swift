@@ -60,14 +60,14 @@ public final class OvergraphDatabase: @unchecked Sendable {
 
   /// Inserts or updates a node and returns its numeric node ID.
   public func upsertNode(
-    typeID: UInt32,
+    labels: [String],
     key: String,
     options: UpsertNodeOptions = .init()
   ) throws -> UInt64 {
     let request = BridgeRequest(
       method: "upsertNode",
       params: .object([
-        "type_id": .number(Double(typeID)),
+        "labels": .array(labels.map { .string($0) }),
         "key": .string(key),
         "options": try .encodable(options, encoder: encoder),
       ])
@@ -75,11 +75,20 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: UInt64Response.self).value
   }
 
+  /// Inserts or updates a node with one label and returns its numeric node ID.
+  public func upsertNode(
+    label: String,
+    key: String,
+    options: UpsertNodeOptions = .init()
+  ) throws -> UInt64 {
+    try upsertNode(labels: [label], key: key, options: options)
+  }
+
   /// Inserts or updates an edge and returns its numeric edge ID.
   public func upsertEdge(
     from: UInt64,
     to: UInt64,
-    typeID: UInt32,
+    label: String,
     options: UpsertEdgeOptions = .init()
   ) throws -> UInt64 {
     let request = BridgeRequest(
@@ -87,7 +96,7 @@ public final class OvergraphDatabase: @unchecked Sendable {
       params: .object([
         "from": .number(Double(from)),
         "to": .number(Double(to)),
-        "type_id": .number(Double(typeID)),
+        "label": .string(label),
         "options": try .encodable(options, encoder: encoder),
       ])
     )
@@ -112,23 +121,23 @@ public final class OvergraphDatabase: @unchecked Sendable {
     return try call(request, as: EdgeRecordEnvelope.self).edge
   }
 
-  /// Fetches a node by its `(typeID, key)` identity.
-  public func getNodeByKey(typeID: UInt32, key: String) throws -> NodeRecord? {
+  /// Fetches a node by its `(label, key)` identity.
+  public func getNodeByKey(label: String, key: String) throws -> NodeRecord? {
     let request = BridgeRequest(
       method: "getNodeByKey",
       params: .object([
-        "type_id": .number(Double(typeID)),
+        "label": .string(label),
         "key": .string(key),
       ])
     )
     return try call(request, as: NodeRecordEnvelope.self).node
   }
 
-  /// Returns all nodes for a given type ID.
-  public func getNodesByType(typeID: UInt32) throws -> [NodeRecord] {
+  /// Returns all nodes matching the given labels.
+  public func getNodesByLabels(_ labels: [String]) throws -> [NodeRecord] {
     let request = BridgeRequest(
-      method: "getNodesByType",
-      params: .object(["type_id": .number(Double(typeID))])
+      method: "getNodesByLabels",
+      params: .object(["labels": .array(labels.map { .string($0) })])
     )
     return try call(request, as: NodesResponse.self).items
   }
@@ -270,7 +279,7 @@ public struct UpsertEdgeOptions: Codable, Sendable {
 /// Options for neighbor traversal from a single node.
 public struct NeighborOptions: Codable, Sendable {
   public var direction: Direction
-  public var typeFilter: [UInt32]?
+  public var edgeLabelFilter: [String]?
   public var limit: Int?
   public var atEpoch: Int64?
   public var decayLambda: Float?
@@ -278,13 +287,13 @@ public struct NeighborOptions: Codable, Sendable {
   /// Creates a new set of neighbor query options.
   public init(
     direction: Direction = .outgoing,
-    typeFilter: [UInt32]? = nil,
+    edgeLabelFilter: [String]? = nil,
     limit: Int? = nil,
     atEpoch: Int64? = nil,
     decayLambda: Float? = nil
   ) {
     self.direction = direction
-    self.typeFilter = typeFilter
+    self.edgeLabelFilter = edgeLabelFilter
     self.limit = limit
     self.atEpoch = atEpoch
     self.decayLambda = decayLambda
@@ -313,7 +322,7 @@ public struct SparseVectorEntry: Codable, Sendable {
 /// Node record returned by the public Swift API.
 public struct NodeRecord: Codable, Sendable {
   public var id: UInt64
-  public var typeID: UInt32
+  public var labels: [String]
   public var key: String
   public var props: [String: JSONValue]
   public var createdAt: Int64
@@ -321,11 +330,10 @@ public struct NodeRecord: Codable, Sendable {
   public var weight: Float
   public var denseVector: [Float]?
   public var sparseVector: [SparseVectorEntry]?
-  public var lastWriteSequence: UInt64
 
   enum CodingKeys: String, CodingKey {
     case id
-    case typeID = "typeId"
+    case labels
     case key
     case props
     case createdAt
@@ -333,7 +341,6 @@ public struct NodeRecord: Codable, Sendable {
     case weight
     case denseVector
     case sparseVector
-    case lastWriteSequence
   }
 }
 
@@ -342,27 +349,25 @@ public struct EdgeRecord: Codable, Sendable {
   public var id: UInt64
   public var from: UInt64
   public var to: UInt64
-  public var typeID: UInt32
+  public var label: String
   public var props: [String: JSONValue]
   public var createdAt: Int64
   public var updatedAt: Int64
   public var weight: Float
   public var validFrom: Int64
   public var validTo: Int64
-  public var lastWriteSequence: UInt64
 
   enum CodingKeys: String, CodingKey {
     case id
     case from
     case to
-    case typeID = "typeId"
+    case label
     case props
     case createdAt
     case updatedAt
     case weight
     case validFrom
     case validTo
-    case lastWriteSequence
   }
 }
 
@@ -370,7 +375,7 @@ public struct EdgeRecord: Codable, Sendable {
 public struct NeighborEntry: Codable, Sendable {
   public var nodeID: UInt64
   public var edgeID: UInt64
-  public var edgeTypeID: UInt32
+  public var label: String
   public var weight: Float
   public var validFrom: Int64
   public var validTo: Int64
@@ -378,7 +383,7 @@ public struct NeighborEntry: Codable, Sendable {
   enum CodingKeys: String, CodingKey {
     case nodeID = "nodeId"
     case edgeID = "edgeId"
-    case edgeTypeID = "edgeTypeId"
+    case label
     case weight
     case validFrom
     case validTo

@@ -13,12 +13,12 @@
   older. With decay enabled, the newer edge should rank higher.
 */
 
-upsert-node 1 person:alice --props '{name: "Alice"}'
-upsert-node 2 project:atlas --props '{name: "Atlas"}'
-upsert-node 2 project:mercury --props '{name: "Mercury"}'
+upsert-node Person alice --props '{name: "Alice"}'
+upsert-node Project atlas --props '{name: "Atlas"}'
+upsert-node Project mercury --props '{name: "Mercury"}'
 
-upsert-edge 1 2 11 --props '{role: "legacy"}' --weight 1.0 --valid-from 2024-01-01
-upsert-edge 1 3 11 --props '{role: "current"}' --weight 1.0 --valid-from 2024-06-01
+upsert-edge 1 2 WORKS_ON --props '{role: "legacy"}' --weight 1.0 --valid-from 2024-01-01
+upsert-edge 1 3 WORKS_ON --props '{role: "current"}' --weight 1.0 --valid-from 2024-06-01
 
 /* Without decay, both edges keep their raw weight. */
 neighbors 1 --direction outgoing --at-epoch 2024-06-15

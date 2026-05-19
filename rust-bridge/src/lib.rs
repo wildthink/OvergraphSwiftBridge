@@ -1,6 +1,6 @@
 use overgraph::{
-    DatabaseEngine, DbOptions, DbStats, Direction, EdgeRecord, NeighborEntry, NeighborOptions,
-    NodeRecord, PropValue, UpsertEdgeOptions, UpsertNodeOptions,
+    DatabaseEngine, DbOptions, DbStats, Direction, EdgeView, NeighborEntry, NeighborOptions,
+    NodeView, PropValue, UpsertEdgeOptions, UpsertNodeOptions,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
@@ -53,7 +53,7 @@ struct UpsertEdgeOptionsDto {
 #[serde(rename_all = "camelCase")]
 struct NeighborOptionsDto {
     direction: Option<String>,
-    type_filter: Option<Vec<u32>>,
+    edge_label_filter: Option<Vec<String>>,
     limit: Option<usize>,
     at_epoch: Option<i64>,
     decay_lambda: Option<f32>,
@@ -67,7 +67,7 @@ struct SparseVectorEntryDto {
 
 #[derive(Deserialize)]
 struct UpsertNodeParams {
-    type_id: u32,
+    labels: Vec<String>,
     key: String,
     options: Option<UpsertNodeOptionsDto>,
 }
@@ -76,7 +76,7 @@ struct UpsertNodeParams {
 struct UpsertEdgeParams {
     from: u64,
     to: u64,
-    type_id: u32,
+    label: String,
     options: Option<UpsertEdgeOptionsDto>,
 }
 
@@ -87,13 +87,13 @@ struct IdParams {
 
 #[derive(Deserialize)]
 struct NodeByKeyParams {
-    type_id: u32,
+    label: String,
     key: String,
 }
 
 #[derive(Deserialize)]
-struct GetNodesByTypeParams {
-    type_id: u32,
+struct GetNodesByLabelsParams {
+    labels: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -134,7 +134,7 @@ struct EmptyResponse {}
 #[serde(rename_all = "camelCase")]
 struct NodeRecordDto {
     id: u64,
-    type_id: u32,
+    labels: Vec<String>,
     key: String,
     props: Map<String, Value>,
     created_at: i64,
@@ -142,7 +142,6 @@ struct NodeRecordDto {
     weight: f32,
     dense_vector: Option<Vec<f32>>,
     sparse_vector: Option<Vec<SparseVectorEntryDto>>,
-    last_write_sequence: u64,
 }
 
 #[derive(Serialize)]
@@ -151,14 +150,13 @@ struct EdgeRecordDto {
     id: u64,
     from: u64,
     to: u64,
-    type_id: u32,
+    label: String,
     props: Map<String, Value>,
     created_at: i64,
     updated_at: i64,
     weight: f32,
     valid_from: i64,
     valid_to: i64,
-    last_write_sequence: u64,
 }
 
 #[derive(Serialize)]
@@ -166,7 +164,7 @@ struct EdgeRecordDto {
 struct NeighborEntryDto {
     node_id: u64,
     edge_id: u64,
-    edge_type_id: u32,
+    label: String,
     weight: f32,
     valid_from: i64,
     valid_to: i64,
@@ -363,7 +361,7 @@ impl TryFrom<NeighborOptionsDto> for NeighborOptions {
     fn try_from(value: NeighborOptionsDto) -> Result<Self, Self::Error> {
         Ok(Self {
             direction: direction_from_string(value.direction)?,
-            type_filter: value.type_filter,
+            edge_label_filter: value.edge_label_filter,
             limit: value.limit,
             at_epoch: value.at_epoch,
             decay_lambda: value.decay_lambda,
@@ -371,11 +369,11 @@ impl TryFrom<NeighborOptionsDto> for NeighborOptions {
     }
 }
 
-impl From<NodeRecord> for NodeRecordDto {
-    fn from(value: NodeRecord) -> Self {
+impl From<NodeView> for NodeRecordDto {
+    fn from(value: NodeView) -> Self {
         Self {
             id: value.id,
-            type_id: value.type_id,
+            labels: value.labels,
             key: value.key,
             props: value
                 .props
@@ -392,18 +390,17 @@ impl From<NodeRecord> for NodeRecordDto {
                     .map(|(dimension, value)| SparseVectorEntryDto { dimension, value })
                     .collect()
             }),
-            last_write_sequence: value.last_write_seq,
         }
     }
 }
 
-impl From<EdgeRecord> for EdgeRecordDto {
-    fn from(value: EdgeRecord) -> Self {
+impl From<EdgeView> for EdgeRecordDto {
+    fn from(value: EdgeView) -> Self {
         Self {
             id: value.id,
             from: value.from,
             to: value.to,
-            type_id: value.type_id,
+            label: value.label,
             props: value
                 .props
                 .into_iter()
@@ -414,7 +411,6 @@ impl From<EdgeRecord> for EdgeRecordDto {
             weight: value.weight,
             valid_from: value.valid_from,
             valid_to: value.valid_to,
-            last_write_sequence: value.last_write_seq,
         }
     }
 }
@@ -424,7 +420,7 @@ impl From<NeighborEntry> for NeighborEntryDto {
         Self {
             node_id: value.node_id,
             edge_id: value.edge_id,
-            edge_type_id: value.edge_type_id,
+            label: value.label,
             weight: value.weight,
             valid_from: value.valid_from,
             valid_to: value.valid_to,
@@ -458,7 +454,7 @@ fn execute(handle: &mut og_db_handle, request: BridgeRequest) -> Result<*mut c_c
             let params: UpsertNodeParams = decode_json(request.params)?;
             let options = params.options.unwrap_or_default().try_into()?;
             json_to_c_string(&UInt64Response {
-                value: engine.upsert_node(params.type_id, &params.key, options).map_err(|e| e.to_string())?,
+                value: engine.upsert_node(params.labels, &params.key, options).map_err(|e| e.to_string())?,
             })
         }
         "upsertEdge" => {
@@ -466,7 +462,7 @@ fn execute(handle: &mut og_db_handle, request: BridgeRequest) -> Result<*mut c_c
             let options = params.options.unwrap_or_default().try_into()?;
             json_to_c_string(&UInt64Response {
                 value: engine
-                    .upsert_edge(params.from, params.to, params.type_id, options)
+                    .upsert_edge(params.from, params.to, &params.label, options)
                     .map_err(|e| e.to_string())?,
             })
         }
@@ -492,16 +488,16 @@ fn execute(handle: &mut og_db_handle, request: BridgeRequest) -> Result<*mut c_c
             let params: NodeByKeyParams = decode_json(request.params)?;
             json_to_c_string(&NodeEnvelope {
                 node: engine
-                    .get_node_by_key(params.type_id, &params.key)
+                    .get_node_by_key(&params.label, &params.key)
                     .map_err(|e| e.to_string())?
                     .map(NodeRecordDto::from),
             })
         }
-        "getNodesByType" => {
-            let params: GetNodesByTypeParams = decode_json(request.params)?;
+        "getNodesByLabels" => {
+            let params: GetNodesByLabelsParams = decode_json(request.params)?;
             json_to_c_string(&NodesResponse {
                 items: engine
-                    .get_nodes_by_type(params.type_id)
+                    .get_nodes_by_labels(params.labels)
                     .map_err(|e| e.to_string())?
                     .into_iter()
                     .map(NodeRecordDto::from)

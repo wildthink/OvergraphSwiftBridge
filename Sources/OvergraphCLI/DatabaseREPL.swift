@@ -42,11 +42,11 @@ struct DatabaseREPL {
       guard tokens.count == 2 else { throw CLIError.usage("get-edge <id>") }
       try printJSON(database.getEdge(id: try parseUInt64(tokens[1], name: "id")))
     case "get-node-by-key":
-      guard tokens.count == 3 else { throw CLIError.usage("get-node-by-key <type-id> <key>") }
-      try printJSON(database.getNodeByKey(typeID: try parseUInt32(tokens[1], name: "type-id"), key: tokens[2]))
-    case "nodes-by-type":
-      guard tokens.count == 2 else { throw CLIError.usage("nodes-by-type <type-id>") }
-      try printJSON(database.getNodesByType(typeID: try parseUInt32(tokens[1], name: "type-id")))
+      guard tokens.count == 3 else { throw CLIError.usage("get-node-by-key <label> <key>") }
+      try printJSON(database.getNodeByKey(label: tokens[1], key: tokens[2]))
+    case "nodes-by-label":
+      guard tokens.count == 2 else { throw CLIError.usage("nodes-by-label <label>") }
+      try printJSON(database.getNodesByLabels([tokens[1]]))
     case "neighbors":
       try runNeighbors(tokens: Array(tokens.dropFirst()))
     case "upsert-node":
@@ -69,12 +69,12 @@ struct DatabaseREPL {
 
   private func runNeighbors(tokens: [String]) throws {
     guard let first = tokens.first else {
-      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]")
+      throw CLIError.usage("neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--edge-labels KNOWS,WORKS_ON] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]")
     }
     let nodeID = try parseUInt64(first, name: "node-id")
     var direction: Direction = .outgoing
     var limit: Int?
-    var types: [UInt32]?
+    var edgeLabels: [String]?
     var atEpoch: Int64?
     var decayLambda: Float?
 
@@ -93,19 +93,14 @@ struct DatabaseREPL {
           throw CLIError.usage("Expected integer after --limit")
         }
         limit = parsed
-      case "--types":
+      case "--edge-labels":
         index += 1
         guard index < tokens.count else {
-          throw CLIError.usage("Expected comma-separated list after --types")
+          throw CLIError.usage("Expected comma-separated list after --edge-labels")
         }
-        types = try tokens[index]
+        edgeLabels = tokens[index]
           .split(separator: ",")
-          .map { part in
-            guard let value = UInt32(part) else {
-              throw CLIError.usage("Invalid edge type '\(part)'")
-            }
-            return value
-          }
+          .map(String.init)
       case "--at-epoch", "--asof":
         index += 1
         guard index < tokens.count else {
@@ -129,7 +124,7 @@ struct DatabaseREPL {
         of: nodeID,
         options: NeighborOptions(
           direction: direction,
-          typeFilter: types,
+          edgeLabelFilter: edgeLabels,
           limit: limit,
           atEpoch: atEpoch,
           decayLambda: decayLambda
@@ -140,9 +135,9 @@ struct DatabaseREPL {
 
   private func runUpsertNode(tokens: [String]) throws {
     guard tokens.count >= 2 else {
-      throw CLIError.usage("upsert-node <type-id> <key> [--props '{name: \"Alice\"}'] [--weight 1.0]")
+      throw CLIError.usage("upsert-node <label> <key> [--props '{name: \"Alice\"}'] [--weight 1.0]")
     }
-    let typeID = try parseUInt32(tokens[0], name: "type-id")
+    let label = tokens[0]
     let key = tokens[1]
     var props: [String: JSONValue] = [:]
     var weight: Float = 1.0
@@ -169,7 +164,7 @@ struct DatabaseREPL {
     }
 
     let id = try database.upsertNode(
-      typeID: typeID,
+      label: label,
       key: key,
       options: UpsertNodeOptions(props: props, weight: weight)
     )
@@ -178,11 +173,11 @@ struct DatabaseREPL {
 
   private func runUpsertEdge(tokens: [String]) throws {
     guard tokens.count >= 3 else {
-      throw CLIError.usage("upsert-edge <from> <to> <type-id> [--props '{role: \"lead\"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]")
+      throw CLIError.usage("upsert-edge <from> <to> <label> [--props '{role: \"lead\"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]")
     }
     let from = try parseUInt64(tokens[0], name: "from")
     let to = try parseUInt64(tokens[1], name: "to")
-    let typeID = try parseUInt32(tokens[2], name: "type-id")
+    let label = tokens[2]
     var props: [String: JSONValue] = [:]
     var weight: Float = 1.0
     var validFrom: Int64?
@@ -224,7 +219,7 @@ struct DatabaseREPL {
     let id = try database.upsertEdge(
       from: from,
       to: to,
-      typeID: typeID,
+      label: label,
       options: UpsertEdgeOptions(props: props, weight: weight, validFrom: validFrom, validTo: validTo)
     )
     print(id)
@@ -239,11 +234,11 @@ struct DatabaseREPL {
         stats
         get-node <id>
         get-edge <id>
-        get-node-by-key <type-id> <key>
-        nodes-by-type <type-id>
-        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--types 10,11] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]
-        upsert-node <type-id> <key> [--props '{name: "Alice"}'] [--weight 1.0]
-        upsert-edge <from> <to> <type-id> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]
+        get-node-by-key <label> <key>
+        nodes-by-label <label>
+        neighbors <node-id> [--direction outgoing|incoming|both] [--limit N] [--edge-labels KNOWS,WORKS_ON] [--at-epoch <date>|--asof <date>] [--decay-lambda λ]
+        upsert-node <label> <key> [--props '{name: "Alice"}'] [--weight 1.0]
+        upsert-edge <from> <to> <label> [--props '{role: "lead"}'] [--weight 1.0] [--valid-from <date>] [--valid-to <date>]
         delete-node <id>
         delete-edge <id>
 
@@ -273,13 +268,6 @@ struct DatabaseREPL {
       throw CLIError.usage("Expected a JSON5 object")
     }
     return try dictionary.mapValues(JSONValue.from(any:))
-  }
-
-  private func parseUInt32(_ text: String, name: String) throws -> UInt32 {
-    guard let value = UInt32(text) else {
-      throw CLIError.usage("Invalid \(name): \(text)")
-    }
-    return value
   }
 
   private func parseUInt64(_ text: String, name: String) throws -> UInt64 {

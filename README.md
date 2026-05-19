@@ -75,7 +75,7 @@ can use raw epoch milliseconds, epoch seconds, `now`, `today`, `yesterday`,
 Example scripts live in `Examples/`:
 
 - `01-social-graph.walkthrough.og`: create a small people graph and run neighbor queries
-- `02-knowledge-graph.walkthrough.og`: create mixed node types and query by key, type, and edge type
+- `02-knowledge-graph.walkthrough.og`: create mixed node labels and query by key, label, and edge label
 - `03-lifecycle-and-cleanup.walkthrough.og`: create tasks, inspect dependencies, then delete edges and nodes
 - `04-temporal-edges.walkthrough.og`: create valid-time edges and query them with `--asof` / `--at-epoch`
 - `05-decay-scoring.walkthrough.og`: compare raw neighbor ranking with time-decayed ranking
@@ -87,8 +87,8 @@ Current note: scripts that create edges assume a fresh empty database so the all
 - Open and close a database
 - Upsert nodes and edges
 - Fetch nodes and edges by ID
-- Fetch node by `(typeID, key)`
-- Fetch nodes by type
+- Fetch node by `(label, key)`
+- Fetch nodes by labels
 - Query neighbors
 - Read database stats
 - Delete nodes and edges
@@ -99,7 +99,7 @@ The REPL currently supports:
 - `get-node`
 - `get-edge`
 - `get-node-by-key`
-- `nodes-by-type`
+- `nodes-by-label`
 - `neighbors`
 - `upsert-node`
 - `upsert-edge`
