@@ -10,30 +10,32 @@ func basicLifecycleAndQueries() throws {
 
   let db = try OvergraphDatabase(path: root.path)
   let alice = try db.upsertNode(
-    typeID: 1,
-    key: "person:alice",
+    label: "Person",
+    key: "alice",
     options: .init(props: ["name": .string("Alice")])
   )
   let atlas = try db.upsertNode(
-    typeID: 2,
-    key: "project:atlas",
+    label: "Project",
+    key: "atlas",
     options: .init(props: ["name": .string("Atlas")])
   )
-  let edge = try db.upsertEdge(from: alice, to: atlas, typeID: 10)
+  let edge = try db.upsertEdge(from: alice, to: atlas, label: "WORKS_ON")
 
   let fetchedAlice = try #require(try db.getNode(id: alice))
-  #expect(fetchedAlice.key == "person:alice")
+  #expect(fetchedAlice.key == "alice")
+  #expect(fetchedAlice.labels == ["Person"])
   #expect(fetchedAlice.props["name"] == .string("Alice"))
 
-  let fetchedByKey = try #require(try db.getNodeByKey(typeID: 1, key: "person:alice"))
+  let fetchedByKey = try #require(try db.getNodeByKey(label: "Person", key: "alice"))
   #expect(fetchedByKey.id == alice)
 
   let neighbors = try db.neighbors(of: alice)
   #expect(neighbors.count == 1)
   #expect(neighbors.first?.nodeID == atlas)
   #expect(neighbors.first?.edgeID == edge)
+  #expect(neighbors.first?.label == "WORKS_ON")
 
-  let projects = try db.getNodesByType(typeID: 2)
+  let projects = try db.getNodesByLabels(["Project"])
   #expect(projects.count == 1)
   #expect(projects.first?.id == atlas)
 

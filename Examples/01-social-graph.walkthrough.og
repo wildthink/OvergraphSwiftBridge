@@ -10,19 +10,19 @@
     3 = carol
 */
 
-upsert-node 1 person:alice --props '{"name":"Alice","role":"engineer","team":"search"}'
-upsert-node 1 person:bob --props '{"name":"Bob","role":"designer","team":"search"}'
-upsert-node 1 person:carol --props '{"name":"Carol","role":"manager","team":"platform"}'
+upsert-node Person alice --props '{"name":"Alice","role":"engineer","team":"search"}'
+upsert-node Person bob --props '{"name":"Bob","role":"designer","team":"search"}'
+upsert-node Person carol --props '{"name":"Carol","role":"manager","team":"platform"}'
 
 /* Connect Alice to Bob and Carol. */
-upsert-edge 1 2 10 --props '{"relationship":"teammate"}'
-upsert-edge 1 3 10 --props '{"relationship":"manager"}'
-upsert-edge 2 3 10 --props '{"relationship":"cross-functional"}'
+upsert-edge 1 2 KNOWS --props '{"relationship":"teammate"}'
+upsert-edge 1 3 KNOWS --props '{"relationship":"manager"}'
+upsert-edge 2 3 KNOWS --props '{"relationship":"cross-functional"}'
 
 /* Typical lookups. */
-get-node-by-key 1 person:alice
+get-node-by-key Person alice
 get-node 2
-nodes-by-type 1
+nodes-by-label Person
 neighbors 1 --direction outgoing
 neighbors 3 --direction incoming
 stats

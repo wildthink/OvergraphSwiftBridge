@@ -5,20 +5,20 @@
     swift run --disable-sandbox overgraph-cli --db /tmp/og-lifecycle --run-script Examples/03-lifecycle-and-cleanup.walkthrough.og
 
   This script assumes an empty database so node IDs are:
-    1 = task:spec
-    2 = task:build
-    3 = task:ship
+    1 = spec
+    2 = build
+    3 = ship
 */
 
-upsert-node 7 task:spec --props '{"title":"Write spec","state":"done"}'
-upsert-node 7 task:build --props '{"title":"Build bridge","state":"active"}'
-upsert-node 7 task:ship --props '{"title":"Ship CLI","state":"todo"}'
+upsert-node Task spec --props '{"title":"Write spec","state":"done"}'
+upsert-node Task build --props '{"title":"Build bridge","state":"active"}'
+upsert-node Task ship --props '{"title":"Ship CLI","state":"todo"}'
 
-/* 21 = depends_on */
-upsert-edge 2 1 21 --props '{"why":"needs design"}'
-upsert-edge 3 2 21 --props '{"why":"needs implementation"}'
+/* Task dependency edges. */
+upsert-edge 2 1 DEPENDS_ON --props '{"why":"needs design"}'
+upsert-edge 3 2 DEPENDS_ON --props '{"why":"needs implementation"}'
 
-nodes-by-type 7
+nodes-by-label Task
 neighbors 3 --direction outgoing
 neighbors 2 --direction incoming
 
@@ -26,7 +26,7 @@ neighbors 2 --direction incoming
 delete-edge 2
 delete-node 3
 
-nodes-by-type 7
+nodes-by-label Task
 stats
 
 quit

@@ -10,26 +10,26 @@
     3 = roadmap
 */
 
-upsert-node 1 person:alice --props '{"name":"Alice","kind":"person"}'
-upsert-node 2 project:atlas --props '{"name":"Atlas","kind":"project","status":"active"}'
-upsert-node 3 doc:roadmap --props '{"title":"Q3 Roadmap","kind":"document"}'
+upsert-node Person alice --props '{"name":"Alice","kind":"person"}'
+upsert-node Project atlas --props '{"name":"Atlas","kind":"project","status":"active"}'
+upsert-node Document roadmap --props '{"title":"Q3 Roadmap","kind":"document"}'
 
-/* Type IDs:
-   11 = works_on
-   12 = references
+/* Edge labels:
+   WORKS_ON
+   REFERENCES
 */
-upsert-edge 1 2 11 --props '{"role":"lead"}'
-upsert-edge 3 2 12 --props '{"reason":"planning"}'
-upsert-edge 1 3 12 --props '{"reason":"owns"}'
+upsert-edge 1 2 WORKS_ON --props '{"role":"lead"}'
+upsert-edge 3 2 REFERENCES --props '{"reason":"planning"}'
+upsert-edge 1 3 REFERENCES --props '{"reason":"owns"}'
 
 /* Query patterns:
    - key lookup
-   - type scan
-   - neighbor traversal with type filtering
+   - label scan
+   - neighbor traversal with edge label filtering
 */
-get-node-by-key 2 project:atlas
-nodes-by-type 2
-neighbors 1 --direction outgoing --types 11,12
+get-node-by-key Project atlas
+nodes-by-label Project
+neighbors 1 --direction outgoing --edge-labels WORKS_ON,REFERENCES
 neighbors 2 --direction incoming
 stats
 

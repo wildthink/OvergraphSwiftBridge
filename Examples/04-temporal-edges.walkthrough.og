@@ -10,13 +10,13 @@
     3 = mercury
 */
 
-upsert-node 1 person:alice --props '{name: "Alice"}'
-upsert-node 2 project:atlas --props '{name: "Atlas"}'
-upsert-node 2 project:mercury --props '{name: "Mercury"}'
+upsert-node Person alice --props '{name: "Alice"}'
+upsert-node Project atlas --props '{name: "Atlas"}'
+upsert-node Project mercury --props '{name: "Mercury"}'
 
 /* Alice worked on Atlas from Jan through May, then moved to Mercury in June. */
-upsert-edge 1 2 11 --props '{role: "lead"}' --valid-from 2024-01-01 --valid-to 2024-05-01
-upsert-edge 1 3 11 --props '{role: "lead"}' --valid-from 2024-06-01
+upsert-edge 1 2 WORKS_ON --props '{role: "lead"}' --valid-from 2024-01-01 --valid-to 2024-05-01
+upsert-edge 1 3 WORKS_ON --props '{role: "lead"}' --valid-from 2024-06-01
 
 /* Current view sees only currently-valid edges. */
 neighbors 1 --direction outgoing
